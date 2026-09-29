@@ -1,0 +1,6 @@
+@ToolShare_HostAddress = http://localhost:5069
+
+GET {{ToolShare_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
