@@ -1,6 +1,5 @@
 namespace ToolShare.Api;
 
-// WHY hand-written mapping: the rules say no mapping library.
 public static class Mappings
 {
     public static MemberResponse ToResponse(this Member m) => new(m.Id, m.Name);

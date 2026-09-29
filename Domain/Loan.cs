@@ -11,8 +11,7 @@ public sealed class Loan : Entity
     public DateTimeOffset? ReturnedAt { get; private set; }
     public LoanStatus Status { get; private set; }
 
-    // WHY private: the only way to make a Loan is CheckOut(), so a loan
-    // always starts life in the CheckedOut state. State can't be faked.
+   
     private Loan(Guid toolId, Guid borrowerId, DateOnly dueDate, DateTimeOffset now)
     {
         ToolId = toolId;
@@ -22,12 +21,10 @@ public sealed class Loan : Entity
         Status = LoanStatus.CheckedOut;
     }
 
-    // WHY a factory method: it names the business action, not just "new".
+    // Factory method: it names the business action, not just "new".
     public static Loan CheckOut(Guid toolId, Guid borrowerId, DateOnly dueDate, DateTimeOffset now)
         => new(toolId, borrowerId, dueDate, now);
 
-    // WHY behavior on the entity: the loan owns its own state transitions.
-    // Returning an already-returned loan is a state conflict (409).
     public void Return(DateTimeOffset now)
     {
         if (Status == LoanStatus.Returned)

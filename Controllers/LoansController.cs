@@ -32,23 +32,20 @@ public class LoansController(ILoanService service, IValidator<CreateLoanRequest>
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken ct)
     {
-        // WHY here: validation = "is it shaped correctly?" and it runs BEFORE
-        // the service. It throws, and the central handler makes it a 400.
+        
         await validator.ValidateAndThrowAsync(request, ct);
 
-        // WHY no if-statement: the controller only translates HTTP <-> service.
+        
         var loan = service.CheckOut(request, idempotencyKey);
 
         // 201 + Location header pointing at the new loan.
         return CreatedAtAction(nameof(GetById), new { id = loan.Id }, loan);
     }
 
-    // WHY no PUT: a loan has exactly one legal change (checked out -> returned),
-    // so a named action is clearer than a generic "replace the whole loan".
     [HttpPost("{id:guid}/return")]
     public IActionResult Return(Guid id)
     {
         service.Return(id);
-        return NoContent(); // 204
+        return NoContent(); // 204 = "the request succeeded, but there's no content to return".
     }
 }

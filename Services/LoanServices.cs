@@ -27,13 +27,10 @@ public sealed class LoanService(
     {
         lock (_gate)
         {
-            // ---- Idempotency check FIRST ----
-            // WHY first: a replay of a successful checkout must NOT reach the
-            // "already checked out" rule, or it would wrongly return 409.
+           
             string? fingerprint = null;
             if (!string.IsNullOrWhiteSpace(idempotencyKey))
             {
-                // WHY serialize: a simple, reliable way to compare two payloads.
                 fingerprint = JsonSerializer.Serialize(request);
 
                 if (idempotency.TryGet(idempotencyKey, out var saved))
@@ -54,21 +51,17 @@ public sealed class LoanService(
             var borrower = members.GetById(request.BorrowerId)
                 ?? throw new NotFoundException($"Member {request.BorrowerId} was not found.");
 
-            // ===== THE ONE RULE THAT MATTERS =====
-            // A perfectly valid request is still refused if the tool already
-            // has an active loan. This is a business decision, not a shape
-            // check, so it lives here in the service, never in a controller.
+            
             var alreadyOut = loans.GetAll()
                 .Any(l => l.ToolId == tool.Id && l.Status == LoanStatus.CheckedOut);
             if (alreadyOut)
-                throw new ConflictException($"Tool '{tool.Name}' is already checked out.");
-            // =====================================
+
 
             var loan = Loan.CheckOut(tool.Id, borrower.Id, request.DueDate, DateTimeOffset.UtcNow);
             loans.Add(loan);
             var response = loan.ToResponse();
 
-            // WHY save only on success: failed attempts must stay retryable.
+           
             if (fingerprint is not null)
                 idempotency.Save(idempotencyKey!, new IdempotencyEntry(fingerprint, response));
 
