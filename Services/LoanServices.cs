@@ -8,9 +8,6 @@ public sealed class LoanService(
     IRepository<Member> members,
     IdempotencyStore idempotency) : ILoanService
 {
-    // WHY a lock: "check if free, then create loan" is two steps. Without a
-    // lock two simultaneous requests could both pass the check and both
-    // check the tool out. The lock makes the pair atomic.
     private readonly object _gate = new();
 
     public IReadOnlyList<LoanResponse> GetAll()
@@ -18,7 +15,6 @@ public sealed class LoanService(
 
     public LoanResponse GetById(Guid id)
     {
-        // WHY throw: the central handler turns this into a 404 problem+json.
         var loan = loans.GetById(id) ?? throw new NotFoundException($"Loan {id} was not found.");
         return loan.ToResponse();
     }
@@ -27,7 +23,6 @@ public sealed class LoanService(
     {
         lock (_gate)
         {
-           
             string? fingerprint = null;
             if (!string.IsNullOrWhiteSpace(idempotencyKey))
             {
@@ -35,33 +30,28 @@ public sealed class LoanService(
 
                 if (idempotency.TryGet(idempotencyKey, out var saved))
                 {
-                    // Same key + different payload = reject (the case people forget!).
                     if (saved!.Fingerprint != fingerprint)
                         throw new IdempotencyKeyReuseException(
                             "This Idempotency-Key was already used with a different request.");
 
-                    // Same key + same payload = return the ORIGINAL response, do nothing new.
                     return saved.Response;
                 }
             }
 
-            // Existence checks: you can't borrow a ghost tool or be a ghost member.
             var tool = tools.GetById(request.ToolId)
                 ?? throw new NotFoundException($"Tool {request.ToolId} was not found.");
             var borrower = members.GetById(request.BorrowerId)
                 ?? throw new NotFoundException($"Member {request.BorrowerId} was not found.");
 
-            
             var alreadyOut = loans.GetAll()
                 .Any(l => l.ToolId == tool.Id && l.Status == LoanStatus.CheckedOut);
             if (alreadyOut)
-
+                throw new ConflictException($"Tool '{tool.Name}' is already checked out.");
 
             var loan = Loan.CheckOut(tool.Id, borrower.Id, request.DueDate, DateTimeOffset.UtcNow);
             loans.Add(loan);
             var response = loan.ToResponse();
 
-           
             if (fingerprint is not null)
                 idempotency.Save(idempotencyKey!, new IdempotencyEntry(fingerprint, response));
 
@@ -69,13 +59,4 @@ public sealed class LoanService(
         }
     }
 
-    public void Return(Guid id)
-    {
-        lock (_gate)
-        {
-            var loan = loans.GetById(id) ?? throw new NotFoundException($"Loan {id} was not found.");
-            loan.Return(DateTimeOffset.UtcNow); // entity enforces its own rule (409 if already returned)
-            loans.Update(loan);
-        }
-    }
-}
+    
