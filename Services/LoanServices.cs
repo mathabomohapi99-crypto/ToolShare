@@ -59,4 +59,13 @@ public sealed class LoanService(
         }
     }
 
-    
+    public void Return(Guid id)
+    {
+        lock (_gate)
+        {
+            var loan = loans.GetById(id) ?? throw new NotFoundException($"Loan {id} was not found.");
+            loan.Return(DateTimeOffset.UtcNow);
+            loans.Update(loan);
+        }
+    }
+}
